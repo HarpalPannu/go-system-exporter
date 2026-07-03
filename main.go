@@ -52,10 +52,8 @@ type SystemMetrics struct {
 
 // Global thread-safe metrics storage
 var (
-	metricsMutex            sync.RWMutex
-	globalMetrics           SystemMetrics
-	rpiUndervoltageSticky   bool
-	rpiThrottledSticky      bool
+	metricsMutex  sync.RWMutex
+	globalMetrics SystemMetrics
 )
 
 // Helper to round float64 values to one decimal place.
@@ -185,8 +183,15 @@ func getRpiThrottledState() (*bool, *bool, *bool, *bool) {
 
 // startMetricsCollector initiates the background goroutine to gather and calculate metrics
 func startMetricsCollector(netInterface string, isRaspberryPi bool) {
+	// Warm up CPU stats — first call with interval 0 has no previous sample
+	// and always returns 0%. This throwaway call primes the internal counters.
+	cpu.Percent(0, false)
+
 	ticker := time.NewTicker(1500 * time.Millisecond)
 	go func() {
+		// RPi sticky state kept goroutine-local (only this goroutine reads/writes them)
+		var rpiUndervoltageSticky, rpiThrottledSticky bool
+
 		for range ticker.C {
 			// 1. CPU Load
 			var cpuLoad float64
