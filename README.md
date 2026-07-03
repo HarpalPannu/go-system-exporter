@@ -1,5 +1,8 @@
 # System Metrics Exporter
 
+> [!CAUTION]
+> This is a personal hobby project. It is provided "as is" without any warranty, express or implied. The author takes no responsibility for system stability, security, or data integrity. Use at your own risk.
+
 A standalone, high-performance, and lightweight system metrics exporter written in Go. It reads specific hardware and OS metrics directly from the Linux kernel and exposes them as a single JSON payload via a non-blocking HTTP GET endpoint `/api/system`. 
 
 Designed specifically to be scraped periodically by a **Home Assistant RESTful sensor**.
