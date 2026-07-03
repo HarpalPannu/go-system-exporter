@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,8 @@ type SystemMetrics struct {
 	DiskUsagePercent float64  `json:"disk_usage_percent"`
 	NetworkRxMBps    float64  `json:"network_rx_mbps"`
 	NetworkTxMBps    float64  `json:"network_tx_mbps"`
+	RpiUndervoltage  *bool    `json:"rpi_undervoltage"`
+	RpiThrottled     *bool    `json:"rpi_throttled"`
 }
 
 // Global thread-safe metrics storage
@@ -138,6 +141,35 @@ func getCPUTemp() *float64 {
 	return &val
 }
 
+// getRpiThrottledState reads the Raspberry Pi firmware get_throttled sysfs node.
+// Returns under-voltage and throttled states as pointers to bool, or nil if not a Raspberry Pi.
+func getRpiThrottledState() (*bool, *bool) {
+	const throttledPath = "/sys/devices/platform/soc/soc:firmware/get_throttled"
+	data, err := os.ReadFile(throttledPath)
+	if err != nil {
+		return nil, nil
+	}
+
+	content := strings.TrimSpace(string(data))
+	var val uint64
+	if strings.HasPrefix(content, "0x") || strings.HasPrefix(content, "0X") {
+		val, err = strconv.ParseUint(strings.TrimPrefix(strings.ToLower(content), "0x"), 16, 64)
+	} else {
+		val, err = strconv.ParseUint(content, 10, 64)
+	}
+
+	if err != nil {
+		return nil, nil
+	}
+
+	// Bit 0: Under-voltage detected (currently active)
+	underVoltage := (val & 0x1) != 0
+	// Bit 2: Throttled (currently active)
+	throttled := (val & 0x4) != 0
+
+	return &underVoltage, &throttled
+}
+
 // startMetricsCollector initiates the background goroutine to gather and calculate metrics
 func startMetricsCollector(netInterface string) {
 	ticker := time.NewTicker(1500 * time.Millisecond)
@@ -226,6 +258,9 @@ func startMetricsCollector(netInterface string) {
 			lastNetTx = currentNetTx
 			hasPrev = true
 
+			// RPi specific power and throttling checks (resilient fallback to nil)
+			rpiUV, rpiThrottled := getRpiThrottledState()
+
 			// Update the thread-safe global structure
 			metricsMutex.Lock()
 			globalMetrics = SystemMetrics{
@@ -239,6 +274,8 @@ func startMetricsCollector(netInterface string) {
 				DiskUsagePercent: diskUsagePercent,
 				NetworkRxMBps:    roundToOne(networkRxMBps),
 				NetworkTxMBps:    roundToOne(networkTxMBps),
+				RpiUndervoltage:  rpiUV,
+				RpiThrottled:     rpiThrottled,
 			}
 			metricsMutex.Unlock()
 		}
