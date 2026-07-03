@@ -24,8 +24,6 @@ You can download a precompiled binary for your system architecture directly from
 
 - 💻 **[Intel/AMD 64-bit (x86_64)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_amd64)** (Standard PC, Server, VM)
 - 🍓 **[ARM 64-bit (arm64)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_arm64)** (Raspberry Pi 4/5, AWS Graviton)
-- 🍓 **[ARM 32-bit (arm)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_arm)** (Older Raspberry Pi models)
-- 💻 **[Intel/AMD 32-bit (386)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_386)** (Legacy 32-bit PCs)
 
 Download the binary to your server, rename it to `system_exporter`, and make it executable:
 ```bash
