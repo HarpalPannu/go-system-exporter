@@ -35,11 +35,13 @@ type SystemMetrics struct {
 	CPULoad                 float64  `json:"cpu_load"`
 	CPUTempC                *float64 `json:"cpu_temp_c"`
 	RAMAvailableMB          float64  `json:"ram_available_mb"`
+	RAMTotalMB              float64  `json:"ram_total_mb"`
 	Uptime                  string   `json:"uptime"`
 	Load1m                  float64  `json:"load_1m"`
 	Load5m                  float64  `json:"load_5m"`
 	Load15m                 float64  `json:"load_15m"`
 	DiskUsagePercent        float64  `json:"disk_usage_percent"`
+	DiskTotalGB             float64  `json:"disk_total_gb"`
 	NetworkRxTotalMB        float64  `json:"network_rx_total_mb"`
 	NetworkTxTotalMB        float64  `json:"network_tx_total_mb"`
 	RpiUndervoltage         *bool    `json:"rpi_undervoltage"`
@@ -196,11 +198,12 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 			// 2. CPU Temperature (graceful fail to nil/null)
 			cpuTemp := getCPUTemp()
 
-			// 3. RAM available in MB
-			var ramAvailableMB float64
+			// 3. RAM available and total in MB
+			var ramAvailableMB, ramTotalMB float64
 			vmem, err := mem.VirtualMemory()
 			if err == nil {
 				ramAvailableMB = math.Round(float64(vmem.Available) / (1024 * 1024))
+				ramTotalMB = math.Round(float64(vmem.Total) / (1024 * 1024))
 			}
 
 			// 4. Uptime (Boot time as ISO 8601/RFC 3339 timestamp)
@@ -219,11 +222,12 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				load15m = roundToTwo(avg.Load15)
 			}
 
-			// 6. Disk Usage Percentage (Root mount '/')
-			var diskUsagePercent float64
+			// 6. Disk Usage Percentage and Total size
+			var diskUsagePercent, diskTotalGB float64
 			diskUsage, err := disk.Usage("/")
 			if err == nil {
 				diskUsagePercent = roundToOne(diskUsage.UsedPercent)
+				diskTotalGB = roundToOne(float64(diskUsage.Total) / (1024 * 1024 * 1024))
 			}
 
 			// 7. Network Bytes
@@ -273,11 +277,13 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				CPULoad:                 cpuLoad,
 				CPUTempC:                cpuTemp,
 				RAMAvailableMB:          ramAvailableMB,
+				RAMTotalMB:              ramTotalMB,
 				Uptime:                  uptimeStr,
 				Load1m:                  load1m,
 				Load5m:                  load5m,
 				Load15m:                 load15m,
 				DiskUsagePercent:        diskUsagePercent,
+				DiskTotalGB:             diskTotalGB,
 				NetworkRxTotalMB:        networkRxTotalMB,
 				NetworkTxTotalMB:        networkTxTotalMB,
 				RpiUndervoltage:         rpiUV,
