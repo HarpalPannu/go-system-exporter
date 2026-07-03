@@ -154,15 +154,17 @@ func getRpiThrottledState() (*bool, *bool, *bool, *bool) {
 	}
 
 	content := strings.TrimSpace(string(data))
-	var val uint64
-	if strings.HasPrefix(content, "0x") || strings.HasPrefix(content, "0X") {
-		val, err = strconv.ParseUint(strings.TrimPrefix(strings.ToLower(content), "0x"), 16, 64)
-	} else {
-		val, err = strconv.ParseUint(content, 10, 64)
-	}
+	content = strings.TrimPrefix(content, "0x")
+	content = strings.TrimPrefix(content, "0X")
 
+	// Parse as hexadecimal (base 16) by default as the sysfs value is formatted in hex (e.g. "50000").
+	val, err := strconv.ParseUint(content, 16, 64)
 	if err != nil {
-		return nil, nil, nil, nil
+		// Fallback to base 10
+		val, err = strconv.ParseUint(content, 10, 64)
+		if err != nil {
+			return nil, nil, nil, nil
+		}
 	}
 
 	// Bit 0: Under-voltage detected (currently active)
