@@ -107,36 +107,9 @@ A HTTP GET request to `http://<your-server-ip>:8080/api/system` returns:
 
 ---
 
-## Home Assistant Installation (Custom Component Integration)
+## Home Assistant Integration
 
-A custom component integration is provided in the `home_assistant/custom_components/system_exporter` directory. It asynchronously pulls the metrics from your Go system exporter and sets up individual sensors inside Home Assistant with full entity support, unique IDs (customizable in Lovelace UI), and correct icons/devices.
+You can natively integrate these metrics into Home Assistant using the dedicated HACS custom component.
 
-### 1. Installation
-
-Copy the `system_exporter` directory into your Home Assistant's `custom_components` directory:
-
-```bash
-# From this workspace:
-cp -r home_assistant/custom_components/system_exporter /path/to/your/homeassistant/config/custom_components/
-```
-
-### 2. Restart & Setup via UI
-
-1. **Restart Home Assistant:** Restart your Home Assistant instance to load the custom component.
-2. **Add integration from the UI:**
-   - In Home Assistant, go to **Settings** -> **Devices & Services**.
-   - Click the **Add Integration** button in the bottom right.
-   - Search for **System Metrics Exporter** and select it.
-   - Enter your Go Exporter Host URL (e.g. `http://192.168.1.50:8080`) and click **Submit**.
-   
-Home Assistant will connect to the API, verify the connection, and immediately register 10 sensors under a single integration instance:
-- `sensor.system_cpu_load`
-- `sensor.system_cpu_temperature`
-- `sensor.system_ram_available`
-- `sensor.system_uptime`
-- `sensor.system_load_1m`
-- `sensor.system_load_5m`
-- `sensor.system_load_15m`
-- `sensor.system_disk_usage`
-- `sensor.system_network_rx_speed`
-- `sensor.system_network_tx_speed`
+For installation and setup instructions, please refer to the integration repository:
+👉 **[HarpalPannu/ha-system-exporter](https://github.com/HarpalPannu/ha-system-exporter)**
