@@ -16,19 +16,34 @@ Designed specifically to be scraped periodically by a **Home Assistant RESTful s
 
 ## Installation & Setup
 
-### 1. Prerequisites
-Ensure you have Go installed on your Linux system (Go 1.21+ recommended).
+### Option A: Use a Precompiled Binary (Recommended)
+You can download a precompiled binary for your system architecture directly from the `bin/` folder of this repository:
 
-### 2. Build the Exporter
-Clone or copy the source files to your workspace directory and compile the binary:
+- 💻 **[Intel/AMD 64-bit (x86_64)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_amd64)** (Standard PC, Server, VM)
+- 🍓 **[ARM 64-bit (arm64)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_arm64)** (Raspberry Pi 4/5, AWS Graviton)
+- 🍓 **[ARM 32-bit (arm)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_arm)** (Older Raspberry Pi models)
+- 💻 **[Intel/AMD 32-bit (386)](https://github.com/HarpalPannu/go-system-exporter/blob/main/bin/system_exporter_linux_386)** (Legacy 32-bit PCs)
+
+Download the binary to your server, rename it to `system_exporter`, and make it executable:
 ```bash
-# Initialize and fetch dependencies
-go mod tidy
-
-# Build the optimized executable
-go build -ldflags="-s -w" -o system_exporter main.go
+chmod +x system_exporter
 ```
-*The `-ldflags="-s -w"` flags strip debugging information, reducing the binary size.*
+
+---
+
+### Option B: Build from Source
+If you prefer to compile from source:
+
+1. **Prerequisites:** Ensure you have Go installed on your Linux system (Go 1.21+ recommended).
+2. **Build the Exporter:**
+   ```bash
+   # Initialize and fetch dependencies
+   go mod tidy
+
+   # Build the optimized executable
+   go build -ldflags="-s -w" -o system_exporter main.go
+   ```
+   *The `-ldflags="-s -w"` flags strip debugging information, reducing the binary size.*
 
 ### 3. Configuration (`config.json`)
 Create a `config.json` file in the same directory as the executable:
