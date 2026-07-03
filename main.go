@@ -50,18 +50,21 @@ type SystemMetrics struct {
 	RpiThrottledOccurred    *bool    `json:"rpi_throttled_has_occurred"`
 }
 
-// Global thread-safe metrics storage
+// Global thread-safe metrics storage for cached JSON.
+// Pre-marshaling the JSON prevents the HTTP handler from holding the RLock
+// during expensive reflection serialization, preventing lock contention
+// under high concurrent request loads.
 var (
-	metricsMutex  sync.RWMutex
-	globalMetrics SystemMetrics
+	metricsMutex      sync.RWMutex
+	globalMetricsJSON []byte
 )
 
-// Helper to round float64 values to one decimal place.
+// roundToOne rounds a float64 value to one decimal place.
 func roundToOne(val float64) float64 {
 	return math.Round(val*10) / 10
 }
 
-// Helper to round float64 values to two decimal places.
+// roundToTwo rounds a float64 value to two decimal places.
 func roundToTwo(val float64) float64 {
 	return math.Round(val*100) / 100
 }
@@ -107,6 +110,7 @@ func detectPrimaryInterface() string {
 			if (iface.Flags&stdnet.FlagUp) != 0 && (iface.Flags&stdnet.FlagLoopback) == 0 {
 				addrs, err := iface.Addrs()
 				if err == nil && len(addrs) > 0 {
+					log.Printf("Debug: Selected interface %s based on assigned address.", iface.Name)
 					return iface.Name
 				}
 			}
@@ -117,15 +121,19 @@ func detectPrimaryInterface() string {
 	if bestInterface == "" {
 		for _, iface := range interfaces {
 			if (iface.Flags&stdnet.FlagUp) != 0 && (iface.Flags&stdnet.FlagLoopback) == 0 {
+				log.Printf("Debug: Selected fallback interface %s.", iface.Name)
 				return iface.Name
 			}
 		}
 	}
 
+	if bestInterface != "" {
+		log.Printf("Debug: Selected interface %s based on traffic volume.", bestInterface)
+	}
 	return bestInterface
 }
 
-// getCPUTemp retrieves CPU temperature and returns a pointer to the value, or nil if unavailable
+// getCPUTemp retrieves CPU temperature and returns a pointer to the value, or nil if unavailable.
 func getCPUTemp() *float64 {
 	temps, err := host.SensorsTemperatures()
 	if err != nil || len(temps) == 0 {
@@ -148,6 +156,7 @@ func getCPUTemp() *float64 {
 
 // getRpiThrottledState reads the Raspberry Pi firmware get_throttled sysfs node.
 // Returns under-voltage, throttled, under-voltage occurred, and throttled occurred states.
+// Gracefully returns nils if the file cannot be read (e.g. on non-RPi systems).
 func getRpiThrottledState() (*bool, *bool, *bool, *bool) {
 	const throttledPath = "/sys/devices/platform/soc/soc:firmware/get_throttled"
 	data, err := os.ReadFile(throttledPath)
@@ -181,7 +190,8 @@ func getRpiThrottledState() (*bool, *bool, *bool, *bool) {
 	return &underVoltage, &throttled, &underVoltageOccurred, &throttledOccurred
 }
 
-// startMetricsCollector initiates the background goroutine to gather and calculate metrics
+// startMetricsCollector initiates the background goroutine to gather and calculate metrics.
+// It pre-marshals the metrics JSON to offload expensive reflection from the HTTP handler.
 func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 	// Warm up CPU stats — first call with interval 0 has no previous sample
 	// and always returns 0%. This throwaway call primes the internal counters.
@@ -190,6 +200,7 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 	ticker := time.NewTicker(1500 * time.Millisecond)
 	go func() {
 		// RPi sticky state kept goroutine-local (only this goroutine reads/writes them)
+		// This strictly avoids any data race condition.
 		var rpiUndervoltageSticky, rpiThrottledSticky bool
 
 		for range ticker.C {
@@ -276,9 +287,7 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				}
 			}
 
-			// Update the thread-safe global structure
-			metricsMutex.Lock()
-			globalMetrics = SystemMetrics{
+			metrics := SystemMetrics{
 				CPULoad:                 cpuLoad,
 				CPUTempC:                cpuTemp,
 				RAMAvailableMB:          ramAvailableMB,
@@ -296,28 +305,39 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				RpiUndervoltageOccurred: rpiUVOccurred,
 				RpiThrottledOccurred:    rpiThrottledOccurred,
 			}
-			metricsMutex.Unlock()
+			
+			// Marshal JSON outside of the lock to prevent blocking API requests
+			jsonData, err := json.MarshalIndent(metrics, "", "  ")
+			if err == nil {
+				// Only hold the lock briefly to swap the byte slice pointer
+				metricsMutex.Lock()
+				globalMetricsJSON = jsonData
+				metricsMutex.Unlock()
+			}
 		}
 	}()
 }
 
-// apiSystemHandler returns the thread-safe global metrics as a JSON payload
+// apiSystemHandler returns the cached JSON metrics payload.
 func apiSystemHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	metricsMutex.RLock()
-	data, err := json.MarshalIndent(globalMetrics, "", "  ")
+	data := globalMetricsJSON
 	metricsMutex.RUnlock()
 
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	if data == nil {
+		http.Error(w, "Metrics initializing...", http.StatusServiceUnavailable)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Write(data)
 }
 
