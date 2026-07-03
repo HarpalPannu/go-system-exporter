@@ -112,13 +112,19 @@ A HTTP GET request to `http://<your-server-ip>:8080/api/system` returns:
   "cpu_load": 2.7,
   "cpu_temp_c": null,
   "ram_available_mb": 7073,
+  "ram_total_mb": 16384,
   "uptime": "2026-07-03T13:45:47Z",
   "load_1m": 0.2,
   "load_5m": 0.41,
   "load_15m": 0.29,
-  "disk_usage_percent": 0.2,
-  "network_rx_mbps": 0.1,
-  "network_tx_mbps": 0.3
+  "disk_available_gb": 402.5,
+  "disk_total_gb": 512.0,
+  "network_rx_total_mb": 150.1,
+  "network_tx_total_mb": 35.3,
+  "rpi_undervoltage": null,
+  "rpi_throttled": null,
+  "rpi_undervoltage_has_occurred": null,
+  "rpi_throttled_has_occurred": null
 }
 ```
 
