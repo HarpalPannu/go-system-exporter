@@ -40,8 +40,8 @@ type SystemMetrics struct {
 	Load5m                  float64  `json:"load_5m"`
 	Load15m                 float64  `json:"load_15m"`
 	DiskUsagePercent        float64  `json:"disk_usage_percent"`
-	NetworkRxMBps           float64  `json:"network_rx_mbps"`
-	NetworkTxMBps           float64  `json:"network_tx_mbps"`
+	NetworkRxTotalMB        float64  `json:"network_rx_total_mb"`
+	NetworkTxTotalMB        float64  `json:"network_tx_total_mb"`
 	RpiUndervoltage         *bool    `json:"rpi_undervoltage"`
 	RpiThrottled            *bool    `json:"rpi_throttled"`
 	RpiUndervoltageOccurred *bool    `json:"rpi_undervoltage_has_occurred"`
@@ -181,16 +181,7 @@ func getRpiThrottledState() (*bool, *bool, *bool, *bool) {
 func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 	ticker := time.NewTicker(1500 * time.Millisecond)
 	go func() {
-		var (
-			lastTime  time.Time
-			lastNetRx uint64
-			lastNetTx uint64
-			hasPrev   bool
-		)
-
 		for range ticker.C {
-			now := time.Now()
-
 			// 1. CPU Load
 			var cpuLoad float64
 			cpuPercents, err := cpu.Percent(0, false)
@@ -231,9 +222,8 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				diskUsagePercent = roundToOne(diskUsage.UsedPercent)
 			}
 
-			// 7. Network Bytes (for delta calculation)
+			// 7. Network Bytes
 			var currentNetRx, currentNetTx uint64
-
 			netIO, err := netops.IOCounters(true)
 			if err == nil {
 				for _, c := range netIO {
@@ -245,25 +235,9 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				}
 			}
 
-			// Calculate rates (MB/s)
-			var networkRxMBps, networkTxMBps float64
-			if hasPrev {
-				duration := now.Sub(lastTime).Seconds()
-				if duration > 0 {
-					if currentNetRx >= lastNetRx {
-						networkRxMBps = float64(currentNetRx-lastNetRx) / (1024 * 1024) / duration
-					}
-					if currentNetTx >= lastNetTx {
-						networkTxMBps = float64(currentNetTx-lastNetTx) / (1024 * 1024) / duration
-					}
-				}
-			}
-
-			// Save histories for next cycle
-			lastTime = now
-			lastNetRx = currentNetRx
-			lastNetTx = currentNetTx
-			hasPrev = true
+			// Convert to Megabytes
+			networkRxTotalMB := roundToOne(float64(currentNetRx) / (1024 * 1024))
+			networkTxTotalMB := roundToOne(float64(currentNetTx) / (1024 * 1024))
 
 			// RPi specific power and throttling checks (resilient fallback to nil)
 			var rpiUV, rpiThrottled, rpiUVOccurred, rpiThrottledOccurred *bool
@@ -282,8 +256,8 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				Load5m:                  load5m,
 				Load15m:                 load15m,
 				DiskUsagePercent:        diskUsagePercent,
-				NetworkRxMBps:           roundToOne(networkRxMBps),
-				NetworkTxMBps:           roundToOne(networkTxMBps),
+				NetworkRxTotalMB:        networkRxTotalMB,
+				NetworkTxTotalMB:        networkTxTotalMB,
 				RpiUndervoltage:         rpiUV,
 				RpiThrottled:            rpiThrottled,
 				RpiUndervoltageOccurred: rpiUVOccurred,
