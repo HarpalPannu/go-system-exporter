@@ -50,8 +50,10 @@ type SystemMetrics struct {
 
 // Global thread-safe metrics storage
 var (
-	metricsMutex  sync.RWMutex
-	globalMetrics SystemMetrics
+	metricsMutex            sync.RWMutex
+	globalMetrics           SystemMetrics
+	rpiUndervoltageSticky   bool
+	rpiThrottledSticky      bool
 )
 
 // Helper to round float64 values to one decimal place.
@@ -244,7 +246,25 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 			// RPi specific power and throttling checks (resilient fallback to nil)
 			var rpiUV, rpiThrottled, rpiUVOccurred, rpiThrottledOccurred *bool
 			if isRaspberryPi {
-				rpiUV, rpiThrottled, rpiUVOccurred, rpiThrottledOccurred = getRpiThrottledState()
+				uv, th, uvOcc, thOcc := getRpiThrottledState()
+				if uv != nil {
+					rpiUV = uv
+					rpiThrottled = th
+					
+					// Update local sticky cache (never reset to false)
+					if *uvOcc {
+						rpiUndervoltageSticky = true
+					}
+					if *thOcc {
+						rpiThrottledSticky = true
+					}
+					
+					// Set local sticky references
+					uvOccVal := rpiUndervoltageSticky
+					thOccVal := rpiThrottledSticky
+					rpiUVOccurred = &uvOccVal
+					rpiThrottledOccurred = &thOccVal
+				}
 			}
 
 			// Update the thread-safe global structure
