@@ -1,4 +1,5 @@
 {
   "port": 8080,
-  "network_interface": "eth0"
+  "network_interface": "eth0",
+  "is_raspberry_pi": false
 }

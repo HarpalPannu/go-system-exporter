@@ -53,10 +53,11 @@ Create a `config.json` file in the same directory as the executable:
 ```json
 {
   "port": 8080,
-  "network_interface": "eth0"
+  "network_interface": "eth0",
+  "is_raspberry_pi": false
 }
 ```
-*Note: If `config.json` is missing or keys are omitted, the exporter defaults to port `8080` and auto-detects the active network interface.*
+*Note: If `config.json` is missing or keys are omitted, the exporter defaults to port `8080` and auto-detects the active network interface. Set `"is_raspberry_pi": true` to enable Raspberry Pi specific power supply (under-voltage) and throttling checks.*
 
 ---
 

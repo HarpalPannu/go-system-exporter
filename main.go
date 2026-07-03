@@ -26,6 +26,7 @@ import (
 type Config struct {
 	Port             int    `json:"port"`
 	NetworkInterface string `json:"network_interface"`
+	IsRaspberryPi    bool   `json:"is_raspberry_pi"`
 }
 
 // SystemMetrics defines the required JSON output structure.
@@ -171,7 +172,7 @@ func getRpiThrottledState() (*bool, *bool) {
 }
 
 // startMetricsCollector initiates the background goroutine to gather and calculate metrics
-func startMetricsCollector(netInterface string) {
+func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 	ticker := time.NewTicker(1500 * time.Millisecond)
 	go func() {
 		var (
@@ -259,7 +260,10 @@ func startMetricsCollector(netInterface string) {
 			hasPrev = true
 
 			// RPi specific power and throttling checks (resilient fallback to nil)
-			rpiUV, rpiThrottled := getRpiThrottledState()
+			var rpiUV, rpiThrottled *bool
+			if isRaspberryPi {
+				rpiUV, rpiThrottled = getRpiThrottledState()
+			}
 
 			// Update the thread-safe global structure
 			metricsMutex.Lock()
@@ -342,8 +346,15 @@ func main() {
 		log.Printf("Configured network interface: %s", config.NetworkInterface)
 	}
 
+	// Log Raspberry Pi configuration
+	if config.IsRaspberryPi {
+		log.Println("Raspberry Pi mode enabled (power/throttling checks active)")
+	} else {
+		log.Println("Raspberry Pi mode disabled")
+	}
+
 	// 3. Start background collector goroutine
-	startMetricsCollector(config.NetworkInterface)
+	startMetricsCollector(config.NetworkInterface, config.IsRaspberryPi)
 
 	// 4. Register HTTP endpoint and start server
 	http.HandleFunc("/api/system", apiSystemHandler)
