@@ -40,7 +40,7 @@ type SystemMetrics struct {
 	Load1m                  float64  `json:"load_1m"`
 	Load5m                  float64  `json:"load_5m"`
 	Load15m                 float64  `json:"load_15m"`
-	DiskUsagePercent        float64  `json:"disk_usage_percent"`
+	DiskAvailableGB         float64  `json:"disk_available_gb"`
 	DiskTotalGB             float64  `json:"disk_total_gb"`
 	NetworkRxTotalMB        float64  `json:"network_rx_total_mb"`
 	NetworkTxTotalMB        float64  `json:"network_tx_total_mb"`
@@ -222,11 +222,11 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				load15m = roundToTwo(avg.Load15)
 			}
 
-			// 6. Disk Usage Percentage and Total size
-			var diskUsagePercent, diskTotalGB float64
+			// 6. Disk Available and Total size in GB
+			var diskAvailableGB, diskTotalGB float64
 			diskUsage, err := disk.Usage("/")
 			if err == nil {
-				diskUsagePercent = roundToOne(diskUsage.UsedPercent)
+				diskAvailableGB = roundToOne(float64(diskUsage.Free) / (1024 * 1024 * 1024))
 				diskTotalGB = roundToOne(float64(diskUsage.Total) / (1024 * 1024 * 1024))
 			}
 
@@ -282,7 +282,7 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				Load1m:                  load1m,
 				Load5m:                  load5m,
 				Load15m:                 load15m,
-				DiskUsagePercent:        diskUsagePercent,
+				DiskAvailableGB:         diskAvailableGB,
 				DiskTotalGB:             diskTotalGB,
 				NetworkRxTotalMB:        networkRxTotalMB,
 				NetworkTxTotalMB:        networkTxTotalMB,
