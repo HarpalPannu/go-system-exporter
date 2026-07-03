@@ -1,0 +1,9 @@
+# Binaries
+system_exporter
+
+# Local Go Environment
+.go_env/
+
+# Home Assistant Integration Repos/Dirs
+home_assistant/
+ha-system-exporter/
