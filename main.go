@@ -32,18 +32,20 @@ type Config struct {
 // SystemMetrics defines the required JSON output structure.
 // Using pointers for nullable/resilient fields such as CPUTempC.
 type SystemMetrics struct {
-	CPULoad          float64  `json:"cpu_load"`
-	CPUTempC         *float64 `json:"cpu_temp_c"`
-	RAMAvailableMB   float64  `json:"ram_available_mb"`
-	Uptime           string   `json:"uptime"`
-	Load1m           float64  `json:"load_1m"`
-	Load5m           float64  `json:"load_5m"`
-	Load15m          float64  `json:"load_15m"`
-	DiskUsagePercent float64  `json:"disk_usage_percent"`
-	NetworkRxMBps    float64  `json:"network_rx_mbps"`
-	NetworkTxMBps    float64  `json:"network_tx_mbps"`
-	RpiUndervoltage  *bool    `json:"rpi_undervoltage"`
-	RpiThrottled     *bool    `json:"rpi_throttled"`
+	CPULoad                 float64  `json:"cpu_load"`
+	CPUTempC                *float64 `json:"cpu_temp_c"`
+	RAMAvailableMB          float64  `json:"ram_available_mb"`
+	Uptime                  string   `json:"uptime"`
+	Load1m                  float64  `json:"load_1m"`
+	Load5m                  float64  `json:"load_5m"`
+	Load15m                 float64  `json:"load_15m"`
+	DiskUsagePercent        float64  `json:"disk_usage_percent"`
+	NetworkRxMBps           float64  `json:"network_rx_mbps"`
+	NetworkTxMBps           float64  `json:"network_tx_mbps"`
+	RpiUndervoltage         *bool    `json:"rpi_undervoltage"`
+	RpiThrottled            *bool    `json:"rpi_throttled"`
+	RpiUndervoltageOccurred *bool    `json:"rpi_undervoltage_has_occurred"`
+	RpiThrottledOccurred    *bool    `json:"rpi_throttled_has_occurred"`
 }
 
 // Global thread-safe metrics storage
@@ -143,12 +145,12 @@ func getCPUTemp() *float64 {
 }
 
 // getRpiThrottledState reads the Raspberry Pi firmware get_throttled sysfs node.
-// Returns under-voltage and throttled states as pointers to bool, or nil if not a Raspberry Pi.
-func getRpiThrottledState() (*bool, *bool) {
+// Returns under-voltage, throttled, under-voltage occurred, and throttled occurred states.
+func getRpiThrottledState() (*bool, *bool, *bool, *bool) {
 	const throttledPath = "/sys/devices/platform/soc/soc:firmware/get_throttled"
 	data, err := os.ReadFile(throttledPath)
 	if err != nil {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 
 	content := strings.TrimSpace(string(data))
@@ -160,15 +162,19 @@ func getRpiThrottledState() (*bool, *bool) {
 	}
 
 	if err != nil {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 
 	// Bit 0: Under-voltage detected (currently active)
 	underVoltage := (val & 0x1) != 0
 	// Bit 2: Throttled (currently active)
 	throttled := (val & 0x4) != 0
+	// Bit 16: Under-voltage occurred (previously active since last boot)
+	underVoltageOccurred := (val & 0x10000) != 0
+	// Bit 18: Throttled occurred (previously active since last boot)
+	throttledOccurred := (val & 0x40000) != 0
 
-	return &underVoltage, &throttled
+	return &underVoltage, &throttled, &underVoltageOccurred, &throttledOccurred
 }
 
 // startMetricsCollector initiates the background goroutine to gather and calculate metrics
@@ -260,26 +266,28 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 			hasPrev = true
 
 			// RPi specific power and throttling checks (resilient fallback to nil)
-			var rpiUV, rpiThrottled *bool
+			var rpiUV, rpiThrottled, rpiUVOccurred, rpiThrottledOccurred *bool
 			if isRaspberryPi {
-				rpiUV, rpiThrottled = getRpiThrottledState()
+				rpiUV, rpiThrottled, rpiUVOccurred, rpiThrottledOccurred = getRpiThrottledState()
 			}
 
 			// Update the thread-safe global structure
 			metricsMutex.Lock()
 			globalMetrics = SystemMetrics{
-				CPULoad:          cpuLoad,
-				CPUTempC:         cpuTemp,
-				RAMAvailableMB:   ramAvailableMB,
-				Uptime:           uptimeStr,
-				Load1m:           load1m,
-				Load5m:           load5m,
-				Load15m:          load15m,
-				DiskUsagePercent: diskUsagePercent,
-				NetworkRxMBps:    roundToOne(networkRxMBps),
-				NetworkTxMBps:    roundToOne(networkTxMBps),
-				RpiUndervoltage:  rpiUV,
-				RpiThrottled:     rpiThrottled,
+				CPULoad:                 cpuLoad,
+				CPUTempC:                cpuTemp,
+				RAMAvailableMB:          ramAvailableMB,
+				Uptime:                  uptimeStr,
+				Load1m:                  load1m,
+				Load5m:                  load5m,
+				Load15m:                 load15m,
+				DiskUsagePercent:        diskUsagePercent,
+				NetworkRxMBps:           roundToOne(networkRxMBps),
+				NetworkTxMBps:           roundToOne(networkTxMBps),
+				RpiUndervoltage:         rpiUV,
+				RpiThrottled:            rpiThrottled,
+				RpiUndervoltageOccurred: rpiUVOccurred,
+				RpiThrottledOccurred:    rpiThrottledOccurred,
 			}
 			metricsMutex.Unlock()
 		}
