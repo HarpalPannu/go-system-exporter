@@ -17,7 +17,6 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
-	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
 	netops "github.com/shirou/gopsutil/v3/net"
 )
@@ -34,14 +33,9 @@ type Config struct {
 type SystemMetrics struct {
 	CPULoad                 float64  `json:"cpu_load"`
 	CPUTempC                *float64 `json:"cpu_temp_c"`
-	RAMAvailableMB          float64  `json:"ram_available_mb"`
-	RAMTotalMB              float64  `json:"ram_total_mb"`
+	RAMUsage                float64  `json:"ram_usage"`
 	Uptime                  string   `json:"uptime"`
-	Load1m                  float64  `json:"load_1m"`
-	Load5m                  float64  `json:"load_5m"`
-	Load15m                 float64  `json:"load_15m"`
-	DiskAvailableGB         float64  `json:"disk_available_gb"`
-	DiskTotalGB             float64  `json:"disk_total_gb"`
+	DiskUsage               float64  `json:"disk_usage"`
 	NetworkRxTotalMB        float64  `json:"network_rx_total_mb"`
 	NetworkTxTotalMB        float64  `json:"network_tx_total_mb"`
 	RpiUndervoltage         *bool    `json:"rpi_undervoltage"`
@@ -190,8 +184,6 @@ func getRpiThrottledState() (*bool, *bool, *bool, *bool) {
 	return &underVoltage, &throttled, &underVoltageOccurred, &throttledOccurred
 }
 
-// startMetricsCollector initiates the background goroutine to gather and calculate metrics.
-// It pre-marshals the metrics JSON to offload expensive reflection from the HTTP handler.
 func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 	// Warm up CPU stats — first call with interval 0 has no previous sample
 	// and always returns 0%. This throwaway call primes the internal counters.
@@ -211,15 +203,15 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				cpuLoad = roundToOne(cpuPercents[0])
 			}
 
+
 			// 2. CPU Temperature (graceful fail to nil/null)
 			cpuTemp := getCPUTemp()
 
-			// 3. RAM available and total in MB
-			var ramAvailableMB, ramTotalMB float64
+			// 3. RAM usage percent
+			var ramUsage float64
 			vmem, err := mem.VirtualMemory()
 			if err == nil {
-				ramAvailableMB = math.Round(float64(vmem.Available) / (1024 * 1024))
-				ramTotalMB = math.Round(float64(vmem.Total) / (1024 * 1024))
+				ramUsage = roundToOne(vmem.UsedPercent)
 			}
 
 			// 4. Uptime (Boot time as ISO 8601/RFC 3339 timestamp)
@@ -229,21 +221,13 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				uptimeStr = time.Unix(int64(bootTime), 0).UTC().Format(time.RFC3339)
 			}
 
-			// 5. Load Averages (1m, 5m, 15m)
-			var load1m, load5m, load15m float64
-			avg, err := load.Avg()
-			if err == nil {
-				load1m = roundToTwo(avg.Load1)
-				load5m = roundToTwo(avg.Load5)
-				load15m = roundToTwo(avg.Load15)
-			}
+			// 5. Load Averages (Removed per request, but we leave the blank space for formatting)
 
-			// 6. Disk Available and Total size in GB
-			var diskAvailableGB, diskTotalGB float64
-			diskUsage, err := disk.Usage("/")
+			// 6. Disk usage percent
+			var diskUsage float64
+			diskUsageStat, err := disk.Usage("/")
 			if err == nil {
-				diskAvailableGB = roundToOne(float64(diskUsage.Free) / (1024 * 1024 * 1024))
-				diskTotalGB = roundToOne(float64(diskUsage.Total) / (1024 * 1024 * 1024))
+				diskUsage = roundToOne(diskUsageStat.UsedPercent)
 			}
 
 			// 7. Network Bytes
@@ -290,14 +274,9 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 			metrics := SystemMetrics{
 				CPULoad:                 cpuLoad,
 				CPUTempC:                cpuTemp,
-				RAMAvailableMB:          ramAvailableMB,
-				RAMTotalMB:              ramTotalMB,
+				RAMUsage:                ramUsage,
 				Uptime:                  uptimeStr,
-				Load1m:                  load1m,
-				Load5m:                  load5m,
-				Load15m:                 load15m,
-				DiskAvailableGB:         diskAvailableGB,
-				DiskTotalGB:             diskTotalGB,
+				DiskUsage:               diskUsage,
 				NetworkRxTotalMB:        networkRxTotalMB,
 				NetworkTxTotalMB:        networkTxTotalMB,
 				RpiUndervoltage:         rpiUV,
