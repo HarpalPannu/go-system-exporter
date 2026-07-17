@@ -54,6 +54,7 @@ var (
 	metricsMutex      sync.RWMutex
 	globalMetricsJSON []byte
 	globalMetrics     *SystemMetrics
+	customRegistry    = prometheus.NewRegistry()
 )
 
 // roundToOne rounds a float64 value to one decimal place.
@@ -421,7 +422,7 @@ func (c *systemCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func init() {
-	prometheus.MustRegister(&systemCollector{})
+	customRegistry.MustRegister(&systemCollector{})
 }
 
 // apiSystemHandler returns the cached JSON metrics payload.
@@ -499,7 +500,7 @@ func main() {
 
 	// 4. Register HTTP endpoint and start server
 	http.HandleFunc("/api/system", apiSystemHandler)
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/metrics", promhttp.HandlerFor(customRegistry, promhttp.HandlerOpts{}))
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Printf("Server listening on http://localhost%s/api/system", addr)
