@@ -102,6 +102,13 @@ To ensure the exporter runs continuously in the background and restarts automati
    sudo systemctl status system-exporter.service
    ```
 
+### Updating
+
+To easily update your installation to the latest binary from GitHub, simply run the included update script (requires the systemd setup above):
+```bash
+sudo ./update.sh
+```
+
 ---
 
 ## API Payload Reference
