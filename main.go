@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
@@ -51,6 +53,7 @@ type SystemMetrics struct {
 var (
 	metricsMutex      sync.RWMutex
 	globalMetricsJSON []byte
+	globalMetrics     *SystemMetrics
 )
 
 // roundToOne rounds a float64 value to one decimal place.
@@ -291,10 +294,134 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				// Only hold the lock briefly to swap the byte slice pointer
 				metricsMutex.Lock()
 				globalMetricsJSON = jsonData
+				globalMetrics = &metrics
 				metricsMutex.Unlock()
 			}
 		}
 	}()
+}
+
+// systemCollector implements the prometheus.Collector interface.
+type systemCollector struct{}
+
+// Describe implements the prometheus.Collector interface.
+func (c *systemCollector) Describe(ch chan<- *prometheus.Desc) {
+	// Descriptions can be left empty for dynamic metrics
+}
+
+// Collect implements the prometheus.Collector interface.
+func (c *systemCollector) Collect(ch chan<- prometheus.Metric) {
+	metricsMutex.RLock()
+	m := globalMetrics
+	metricsMutex.RUnlock()
+
+	if m == nil {
+		return
+	}
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc("system_cpu_load_percent", "CPU load percentage.", nil, nil),
+		prometheus.GaugeValue,
+		m.CPULoad,
+	)
+
+	if m.CPUTempC != nil {
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc("system_cpu_temp_celsius", "CPU temperature in degrees Celsius.", nil, nil),
+			prometheus.GaugeValue,
+			*m.CPUTempC,
+		)
+	}
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc("system_ram_usage_percent", "RAM usage percentage.", nil, nil),
+		prometheus.GaugeValue,
+		m.RAMUsage,
+	)
+
+	if t, err := time.Parse(time.RFC3339, m.Uptime); err == nil {
+		bootTimeUnix := float64(t.Unix())
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc("system_boot_time_seconds", "System boot time in unix epoch seconds.", nil, nil),
+			prometheus.GaugeValue,
+			bootTimeUnix,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc("system_uptime_seconds", "System uptime in seconds.", nil, nil),
+			prometheus.GaugeValue,
+			time.Since(t).Seconds(),
+		)
+	}
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc("system_disk_usage_percent", "Disk usage percentage.", nil, nil),
+		prometheus.GaugeValue,
+		m.DiskUsage,
+	)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc("system_network_rx_total_megabytes", "Total bytes received in Megabytes.", nil, nil),
+		prometheus.GaugeValue,
+		m.NetworkRxTotalMB,
+	)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc("system_network_tx_total_megabytes", "Total bytes transmitted in Megabytes.", nil, nil),
+		prometheus.GaugeValue,
+		m.NetworkTxTotalMB,
+	)
+
+	if m.RpiUndervoltage != nil {
+		val := 0.0
+		if *m.RpiUndervoltage {
+			val = 1.0
+		}
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc("system_rpi_undervoltage", "Raspberry Pi under-voltage detected (currently active).", nil, nil),
+			prometheus.GaugeValue,
+			val,
+		)
+	}
+
+	if m.RpiThrottled != nil {
+		val := 0.0
+		if *m.RpiThrottled {
+			val = 1.0
+		}
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc("system_rpi_throttled", "Raspberry Pi throttled (currently active).", nil, nil),
+			prometheus.GaugeValue,
+			val,
+		)
+	}
+
+	if m.RpiUndervoltageOccurred != nil {
+		val := 0.0
+		if *m.RpiUndervoltageOccurred {
+			val = 1.0
+		}
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc("system_rpi_undervoltage_has_occurred", "Raspberry Pi under-voltage occurred (previously active since last boot).", nil, nil),
+			prometheus.GaugeValue,
+			val,
+		)
+	}
+
+	if m.RpiThrottledOccurred != nil {
+		val := 0.0
+		if *m.RpiThrottledOccurred {
+			val = 1.0
+		}
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc("system_rpi_throttled_has_occurred", "Raspberry Pi throttled occurred (previously active since last boot).", nil, nil),
+			prometheus.GaugeValue,
+			val,
+		)
+	}
+}
+
+func init() {
+	prometheus.MustRegister(&systemCollector{})
 }
 
 // apiSystemHandler returns the cached JSON metrics payload.
@@ -321,7 +448,7 @@ func apiSystemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.Println("Starting System Metrics Exporter...")
+	log.Println("Starting System Metrics Exporter v2.0...")
 
 	// 1. Locate and parse configuration file
 	exePath, err := os.Executable()
@@ -372,9 +499,11 @@ func main() {
 
 	// 4. Register HTTP endpoint and start server
 	http.HandleFunc("/api/system", apiSystemHandler)
+	http.Handle("/metrics", promhttp.Handler())
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Printf("Server listening on http://localhost%s/api/system", addr)
+	log.Printf("Prometheus metrics available on http://localhost%s/metrics", addr)
 
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatalf("Server error: %v", err)

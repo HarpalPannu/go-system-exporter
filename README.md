@@ -14,6 +14,7 @@ Designed specifically to be scraped periodically by a **Home Assistant RESTful s
 - **Auto-Discovery:** Automatically detects your primary network interface on startup if not explicitly configured.
 - **Resilient:** Gracefully handles missing metrics (like CPU temperature in VM/WSL environments) by returning `null` instead of crashing.
 - **Home Assistant Friendly:** Formats the system boot time as an ISO 8601/RFC 3339 UTC timestamp, allowing Home Assistant to natively show relative uptime (e.g., *"3 hours ago"*).
+- **Prometheus Support:** Exports dynamic system metrics natively in Prometheus format at the `/metrics` endpoint.
 
 ---
 
@@ -122,6 +123,22 @@ A HTTP GET request to `http://<your-server-ip>:8080/api/system` returns:
   "rpi_throttled_has_occurred": null
 }
 ```
+
+---
+
+## Prometheus Metrics
+
+A HTTP GET request to `http://<your-server-ip>:8080/metrics` exposes standard Prometheus gauges natively. The exporter automatically detects available hardware and omits missing sensors to prevent false zeros:
+
+- `system_cpu_load_percent`
+- `system_cpu_temp_celsius` *(omitted if missing)*
+- `system_ram_usage_percent`
+- `system_boot_time_seconds`
+- `system_uptime_seconds`
+- `system_disk_usage_percent`
+- `system_network_rx_total_megabytes`
+- `system_network_tx_total_megabytes`
+- Raspberry Pi specific throttling and under-voltage gauges *(omitted if not on RPi)*
 
 ---
 
