@@ -35,7 +35,7 @@ type Config struct {
 // Using pointers for nullable/resilient fields such as CPUTempC.
 type SystemMetrics struct {
 	CPULoad                 float64  `json:"cpu_load"`
-	CPULoad1Min             float64  `json:"cpu_load_1_min"`
+	CPULoad1MinPercent      float64  `json:"cpu_load_1_min_percent"`
 	CPUTempC                *float64 `json:"cpu_temp_c"`
 	RAMUsage                float64  `json:"ram_usage"`
 	Uptime                  string   `json:"uptime"`
@@ -227,10 +227,12 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				uptimeStr = time.Unix(int64(bootTime), 0).UTC().Format(time.RFC3339)
 			}
 
-			// 5. Load Averages
-			var cpuLoad1Min float64
+			// 5. Load Averages (1 min) as percentage
+			var cpuLoad1MinPercent float64
 			if avg, err := load.Avg(); err == nil {
-				cpuLoad1Min = roundToTwo(avg.Load1)
+				if cores, err := cpu.Counts(true); err == nil && cores > 0 {
+					cpuLoad1MinPercent = roundToOne((avg.Load1 / float64(cores)) * 100)
+				}
 			}
 
 			// 6. Disk usage percent
@@ -283,7 +285,7 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 
 			metrics := SystemMetrics{
 				CPULoad:                 cpuLoad,
-				CPULoad1Min:             cpuLoad1Min,
+				CPULoad1MinPercent:      cpuLoad1MinPercent,
 				CPUTempC:                cpuTemp,
 				RAMUsage:                ramUsage,
 				Uptime:                  uptimeStr,
@@ -334,9 +336,9 @@ func (c *systemCollector) Collect(ch chan<- prometheus.Metric) {
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc("system_cpu_load_1_min", "CPU load average over 1 minute.", nil, nil),
+		prometheus.NewDesc("system_cpu_load_1_min_percent", "CPU load average over 1 minute as a percentage of total cores.", nil, nil),
 		prometheus.GaugeValue,
-		m.CPULoad1Min,
+		m.CPULoad1MinPercent,
 	)
 
 	if m.CPUTempC != nil {
