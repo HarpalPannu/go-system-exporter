@@ -19,6 +19,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
 	netops "github.com/shirou/gopsutil/v3/net"
 )
@@ -34,6 +35,7 @@ type Config struct {
 // Using pointers for nullable/resilient fields such as CPUTempC.
 type SystemMetrics struct {
 	CPULoad                 float64  `json:"cpu_load"`
+	CPULoad1Min             float64  `json:"cpu_load_1_min"`
 	CPUTempC                *float64 `json:"cpu_temp_c"`
 	RAMUsage                float64  `json:"ram_usage"`
 	Uptime                  string   `json:"uptime"`
@@ -225,7 +227,11 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 				uptimeStr = time.Unix(int64(bootTime), 0).UTC().Format(time.RFC3339)
 			}
 
-			// 5. Load Averages (Removed per request, but we leave the blank space for formatting)
+			// 5. Load Averages
+			var cpuLoad1Min float64
+			if avg, err := load.Avg(); err == nil {
+				cpuLoad1Min = roundToTwo(avg.Load1)
+			}
 
 			// 6. Disk usage percent
 			var diskUsage float64
@@ -277,6 +283,7 @@ func startMetricsCollector(netInterface string, isRaspberryPi bool) {
 
 			metrics := SystemMetrics{
 				CPULoad:                 cpuLoad,
+				CPULoad1Min:             cpuLoad1Min,
 				CPUTempC:                cpuTemp,
 				RAMUsage:                ramUsage,
 				Uptime:                  uptimeStr,
@@ -324,6 +331,12 @@ func (c *systemCollector) Collect(ch chan<- prometheus.Metric) {
 		prometheus.NewDesc("system_cpu_load_percent", "CPU load percentage.", nil, nil),
 		prometheus.GaugeValue,
 		m.CPULoad,
+	)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc("system_cpu_load_1_min", "CPU load average over 1 minute.", nil, nil),
+		prometheus.GaugeValue,
+		m.CPULoad1Min,
 	)
 
 	if m.CPUTempC != nil {

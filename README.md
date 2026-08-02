@@ -118,6 +118,7 @@ A HTTP GET request to `http://<your-server-ip>:8080/api/system` returns:
 ```json
 {
   "cpu_load": 2.7,
+  "cpu_load_1_min": 1.45,
   "cpu_temp_c": null,
   "ram_usage": 45.2,
   "uptime": "2026-07-03T13:45:47Z",
@@ -138,6 +139,7 @@ A HTTP GET request to `http://<your-server-ip>:8080/api/system` returns:
 A HTTP GET request to `http://<your-server-ip>:8080/metrics` exposes standard Prometheus gauges natively. The exporter automatically detects available hardware and omits missing sensors to prevent false zeros:
 
 - `system_cpu_load_percent`
+- `system_cpu_load_1_min`
 - `system_cpu_temp_celsius` *(omitted if missing)*
 - `system_ram_usage_percent`
 - `system_boot_time_seconds`
